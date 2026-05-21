@@ -16,6 +16,8 @@ export default function SiswaPage() {
     no_hp_ortu: "",
     nama_ortu: "",
   });
+  const [scanningNfc, setScanningNfc] = useState(false);
+  const [nfcStatus, setNfcStatus] = useState("");
 
   useEffect(() => {
     fetchSiswa();
@@ -46,6 +48,50 @@ export default function SiswaPage() {
       fetchSiswa();
     } else {
       alert(result.message);
+    }
+  }
+
+  async function scanNfcUid() {
+    if (!("NDEFReader" in window)) {
+      setNfcStatus("❌ NFC tidak didukung. Gunakan Chrome Android.");
+      return;
+    }
+
+    setScanningNfc(true);
+    setNfcStatus("📡 Tempelkan kartu NFC...");
+
+    try {
+      const ndef = new (window as any).NDEFReader();
+      const controller = new AbortController();
+
+      ndef.addEventListener("reading", (event: any) => {
+        const uid = event.serialNumber.toUpperCase();
+        setForm((prev) => ({ ...prev, nfc_uid: uid }));
+        setNfcStatus(`✅ Kartu terbaca: ${uid}`);
+        setScanningNfc(false);
+        controller.abort();
+        if (navigator.vibrate) navigator.vibrate(200);
+      }, { once: true });
+
+      ndef.addEventListener("readingerror", () => {
+        setNfcStatus("❌ Gagal membaca kartu. Coba lagi.");
+        setScanningNfc(false);
+        controller.abort();
+      }, { once: true });
+
+      await ndef.scan({ signal: controller.signal });
+
+      // Auto timeout 15 detik
+      setTimeout(() => {
+        if (scanningNfc) {
+          controller.abort();
+          setScanningNfc(false);
+          setNfcStatus("⏱️ Timeout. Tekan scan lagi.");
+        }
+      }, 15000);
+    } catch (error: any) {
+      setNfcStatus(`❌ ${error.message || "Gagal scan NFC"}`);
+      setScanningNfc(false);
     }
   }
 
@@ -111,14 +157,31 @@ export default function SiswaPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               NFC UID
             </label>
-            <input
-              type="text"
-              required
-              value={form.nfc_uid}
-              onChange={(e) => setForm({ ...form, nfc_uid: e.target.value })}
-              className="w-full border rounded-md px-3 py-2"
-              placeholder="Scan kartu untuk mendapatkan UID"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                required
+                value={form.nfc_uid}
+                onChange={(e) => setForm({ ...form, nfc_uid: e.target.value })}
+                className="flex-1 border rounded-md px-3 py-2"
+                placeholder="Tap kartu atau ketik manual"
+              />
+              <button
+                type="button"
+                onClick={scanNfcUid}
+                disabled={scanningNfc}
+                className={`px-4 py-2 rounded-md text-sm font-medium text-white transition ${
+                  scanningNfc
+                    ? "bg-yellow-500 animate-pulse"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {scanningNfc ? "📡 Scanning..." : "📲 Scan NFC"}
+              </button>
+            </div>
+            {nfcStatus && (
+              <p className="text-xs mt-1 text-gray-600">{nfcStatus}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
